@@ -63,6 +63,8 @@ const env = {
   nodeEnv: getFirstDefinedEnv(["NODE_ENV"], "development"),
   port: Number(getFirstDefinedEnv(["PORT"], "5000")),
   mongoUri: getFirstDefinedEnv(["MONGODB_URI"], "mongodb://127.0.0.1:27017/ai_interview_platform"),
+  mongoFallbackUri: getFirstDefinedEnv(["MONGODB_FALLBACK_URI"], "mongodb://127.0.0.1:27017/ai_interview_platform"),
+  mongoAllowFallback: !/^false$/i.test(getFirstDefinedEnv(["MONGODB_ALLOW_FALLBACK"], "true")),
   mongoIpFamily: (() => {
     const parsed = Number(getFirstDefinedEnv(["MONGO_IP_FAMILY"], "4"));
     return parsed === 4 || parsed === 6 ? parsed : 4;
@@ -112,7 +114,7 @@ const env = {
   openAiTranscriptionLanguage: getFirstDefinedEnv(["OPENAI_TRANSCRIPTION_LANGUAGE"]),
   openAiTimeoutMs: Number(getFirstDefinedEnv(["OPENAI_TIMEOUT_MS"], "20000")),
   openAiMaxRetries: Math.max(1, Number(getFirstDefinedEnv(["OPENAI_MAX_RETRIES"], "3"))),
-  interviewResultEmailEnabled: /^true$/i.test(getFirstDefinedEnv(["INTERVIEW_RESULT_EMAIL_ENABLED"], "false")),
+  interviewResultEmailEnabled: /^true$/i.test(getFirstDefinedEnv(["INTERVIEW_RESULT_EMAIL_ENABLED"], "true")),
   interviewResultEmailDelayMs: Math.max(0, Number(getFirstDefinedEnv(["INTERVIEW_RESULT_EMAIL_DELAY_MS"], "5000"))),
   interviewSelectionThreshold: Math.max(0, Math.min(100, Number(getFirstDefinedEnv(["INTERVIEW_SELECTION_THRESHOLD"], "70")))),
   emailProvider: getFirstDefinedEnv(["EMAIL_PROVIDER"], "resend"),

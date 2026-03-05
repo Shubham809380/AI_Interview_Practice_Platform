@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   Brain,
   BriefcaseBusiness,
@@ -36,10 +36,10 @@ const NAV_ITEMS = [
 
 function navClass({ isActive }) {
   return [
-    "inline-flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition",
+    "inline-flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition",
     isActive
-      ? "bg-white/12 text-white"
-      : "text-slate-200 hover:bg-white/10"
+      ? "bg-brand-500 text-white shadow-soft"
+      : "text-slate-200 hover:bg-white/10 hover:text-white"
   ].join(" ");
 }
 
@@ -206,12 +206,15 @@ export function AppLayout({ user, onLogout, children }) {
       </div>
 
       <div className="flex min-h-screen">
-        <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-slate-950 text-slate-100 md:flex">
+        <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 md:flex">
           <div className="border-b border-slate-800 px-5 py-5">
-            <div className="flex items-center gap-2">
+            <p className="inline-flex items-center rounded-full border border-brand-300/40 bg-brand-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-brand-200">
+              Interview OS
+            </p>
+            <div className="mt-2 flex items-center gap-2">
               <h1 className="truncate font-display text-xl font-extrabold text-white">AI Interview Platform</h1>
             </div>
-            <p className="mt-1 text-xs text-slate-400">AI Interview Platform</p>
+            <p className="mt-1 text-xs text-slate-400">Practice. Score. Get Hired.</p>
           </div>
 
           <nav className="space-y-1 p-4">
@@ -261,7 +264,25 @@ export function AppLayout({ user, onLogout, children }) {
                   Welcome, {userDisplayName} | Points {user?.points || 0} | Streak {user?.streak || 0} | {isOnline ? "Online" : "Offline Mode"}
                 </p>
               </div>
-              <ThemeToggle />
+              <div className="flex items-center gap-2">
+                {user?.role !== "admin" ? (
+                  <>
+                    <Link
+                      to="/interview"
+                      className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                    >
+                      Start Interview
+                    </Link>
+                    <Link
+                      to="/subscriptions"
+                      className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600"
+                    >
+                      Upgrade
+                    </Link>
+                  </>
+                ) : null}
+                <ThemeToggle />
+              </div>
             </div>
           </header>
 

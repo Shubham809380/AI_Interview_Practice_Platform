@@ -1,14 +1,40 @@
+function isLocalHostname(hostname = "") {
+  const normalized = String(hostname || "").trim().toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1";
+}
+
+function normalizeApiBase(base = "") {
+  return String(base || "").trim().replace(/\/+$/, "");
+}
+
+function shouldIgnoreConfiguredApiBase(configuredBase) {
+  if (!configuredBase || typeof window === "undefined") {
+    return false;
+  }
+
+  if (isLocalHostname(window.location.hostname)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(configuredBase);
+    return isLocalHostname(parsed.hostname);
+  } catch {
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(String(configuredBase));
+  }
+}
+
 function getApiBase() {
-  const configured = String(import.meta.env.VITE_API_BASE || "").trim();
-  if (configured) {
+  const configured = normalizeApiBase(import.meta.env.VITE_API_BASE || "");
+  if (configured && !shouldIgnoreConfiguredApiBase(configured)) {
     return configured;
   }
   if (typeof window !== "undefined") {
     const { protocol, hostname } = window.location;
-    const isLocal = hostname === "localhost" || hostname === "127.0.0.1";
-    if (isLocal) {
+    if (isLocalHostname(hostname)) {
       return `${protocol}//${hostname}:5000/api`;
     }
+    return `${protocol}//${hostname}/api`;
   }
   return "/api";
 }
@@ -119,7 +145,9 @@ async function request(path, { method = "GET", token = "", body } = {}) {
     return cachedPayload;
   }
   if (!response.ok) {
-    const fallbackByStatus = response.status === 502 || response.status === 503 || response.status === 504 ? "Backend unreachable. Start backend server on http://localhost:5000." : `Request failed (${response.status}).`;
+    const fallbackByStatus = response.status === 502 || response.status === 503 || response.status === 504
+      ? "Backend unreachable. Verify API server is running and VITE_API_BASE is configured correctly."
+      : `Request failed (${response.status}).`;
     const textMessage = String(textBody || "").trim().slice(0, 160);
     throw new Error(payload.message || textMessage || fallbackByStatus);
   }

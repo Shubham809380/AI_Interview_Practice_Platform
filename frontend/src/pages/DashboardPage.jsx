@@ -166,6 +166,13 @@ export function DashboardPage() {
     ];
   }, [analytics, sessions]);
 
+  const placementReadiness = useMemo(() => {
+    const averageScore = Number(analytics?.averageScore || 0);
+    const completed = Number(analytics?.completedSessions || 0);
+    const momentumBonus = Math.min(12, completed * 2);
+    return Math.max(0, Math.min(100, Math.round(averageScore * 0.85 + momentumBonus)));
+  }, [analytics?.averageScore, analytics?.completedSessions]);
+
   const profileCompletion = useMemo(() => {
     const checks = [
       Boolean(user?.name),
@@ -371,10 +378,15 @@ export function DashboardPage() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="glass-panel rounded-2xl p-5"
+        className="relative overflow-hidden rounded-2xl border border-white/40 bg-white/70 p-5 shadow-glass dark:border-white/10 dark:bg-slate-900/45"
       >
+        <div className="pointer-events-none absolute right-0 top-0 h-36 w-36 rounded-full bg-brand-300/30 blur-3xl dark:bg-brand-500/20" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-24 w-24 rounded-full bg-emerald-300/30 blur-3xl dark:bg-emerald-500/20" />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
+            <p className="inline-flex items-center rounded-full border border-brand-300/40 bg-brand-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-brand-700 dark:text-brand-200">
+              Placement Readiness: {placementReadiness}/100
+            </p>
             <h1 className="font-display text-3xl font-extrabold text-slate-900 dark:text-slate-100">
               Welcome, <span className="text-brand-600 dark:text-brand-300">{user?.name || "Candidate"}</span>
             </h1>
@@ -408,6 +420,20 @@ export function DashboardPage() {
             >
               {deletingAccount ? "Deleting..." : "Delete My Account Data"}
             </button>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-slate-700 dark:bg-slate-900/55">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Outcome Signal</p>
+            <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {placementReadiness >= 75 ? "Strong trajectory for interview conversion." : "Consistent practice can push conversion readiness higher."}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-slate-700 dark:bg-slate-900/55">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Next Milestone</p>
+            <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Reach {Math.max(80, Number(analytics?.averageScore || 0) + 5)}/100 average score and maintain a 7-day streak.
+            </p>
           </div>
         </div>
         <div className="mt-4">

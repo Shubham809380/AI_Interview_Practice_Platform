@@ -15,7 +15,8 @@ const {
 } = require("../services/questionGenerator");
 const { generateGeminiText } = require("../services/geminiClient");
 const { generateOpenAiText } = require("../services/openAiClient");
-const { sendInterviewResultEmail, queueInterviewResultEmail } = require("../services/interviewResultEmail");
+const { env } = require("../config/env");
+const { buildOutcome, sendInterviewResultEmail } = require("../services/interviewResultEmail");
 const { applyGamification } = require("../services/badgeService");
 const { logger } = require("../utils/logger");
 const router = express.Router();
@@ -209,7 +210,7 @@ function computeJobFitScore(session, answeredQuestions) {
 function markInterviewResultEmailQueued(session) {
   const existing = session?.notifications?.interviewResultEmail || {};
   const status = String(existing?.lastStatus || "").toLowerCase();
-  if (status === "sent" || status === "queued") {
+  if (status === "sent") {
     return false;
   }
   const queuedAt = new Date();
@@ -224,14 +225,49 @@ function markInterviewResultEmailQueued(session) {
   };
   return true;
 }
-function scheduleInterviewResultEmail({ session, user, req, trigger = "complete" }) {
+function buildSelectionResult(overallScore = 0) {
+  const outcome = buildOutcome(overallScore);
+  return {
+    selected: Boolean(outcome.selected),
+    statusLabel: String(outcome.statusLabel || ""),
+    cutoffScore: Number(outcome.threshold || 0)
+  };
+}
+function buildEmailNotificationResult(session, recipientEmail = "") {
+  const state = session?.notifications?.interviewResultEmail || {};
+  const rawStatus = String(state?.lastStatus || "").trim().toLowerCase();
+  return {
+    enabled: Boolean(env.interviewResultEmailEnabled),
+    recipientEmail: String(recipientEmail || "").trim(),
+    status: rawStatus || (env.interviewResultEmailEnabled ? "pending" : "disabled"),
+    queuedAt: state?.queuedAt || null,
+    sentAt: state?.sentAt || null,
+    lastAttemptAt: state?.lastAttemptAt || null,
+    attempts: Math.max(0, Number(state?.attempts || 0)),
+    error: String(state?.lastError || "")
+  };
+}
+async function syncLatestEmailNotificationState(session) {
+  if (!session?._id) {
+    return;
+  }
+  const latest = await InterviewSession.findById(session._id).select("notifications.interviewResultEmail").lean();
+  if (!latest?.notifications?.interviewResultEmail) {
+    return;
+  }
+  session.notifications = {
+    ...(session.notifications || {}),
+    interviewResultEmail: latest.notifications.interviewResultEmail
+  };
+}
+async function scheduleInterviewResultEmail({ session, user, req, trigger = "complete" }) {
   const recipientEmail = String(user?.email || "").trim();
   if (!recipientEmail) {
     logger.warn("Interview result email skipped: missing recipient email", {
       sessionId: String(session?._id || ""),
       trigger
     });
-    return;
+    return false;
   }
   const sessionId = String(session?._id || "");
   const payload = {
@@ -246,61 +282,98 @@ function scheduleInterviewResultEmail({ session, user, req, trigger = "complete"
     strengths: Array.isArray(session?.summary?.strengths) ? session.summary.strengths : [],
     improvements: Array.isArray(session?.summary?.improvements) ? session.summary.improvements : []
   };
-  queueInterviewResultEmail({
-    trace: {
+  try {
+    const attemptedAt = new Date();
+    await InterviewSession.updateOne(
+      { _id: session?._id },
+      {
+        $set: {
+          "notifications.interviewResultEmail.lastAttemptAt": attemptedAt
+        },
+        $inc: {
+          "notifications.interviewResultEmail.attempts": 1
+        }
+      }
+    );
+    const result = await sendInterviewResultEmail(payload);
+    const update = {
+      "notifications.interviewResultEmail.lastStatus": String(result?.status || "failed"),
+      "notifications.interviewResultEmail.lastError": String(result?.error || ""),
+      "notifications.interviewResultEmail.providerMessageId": String(result?.providerMessageId || "")
+    };
+    if (result?.sent) {
+      update["notifications.interviewResultEmail.sentAt"] = new Date();
+    }
+    await InterviewSession.updateOne({ _id: session?._id }, { $set: update });
+    if (result?.sent) {
+      logger.info("Interview result email sent", {
+        sessionId,
+        to: recipientEmail,
+        providerMessageId: String(result?.providerMessageId || "")
+      });
+    } else {
+      logger.warn("Interview result email not sent", {
+        sessionId,
+        to: recipientEmail,
+        status: String(result?.status || "failed"),
+        error: String(result?.error || "")
+      });
+    }
+    return Boolean(result?.sent);
+  } catch (error) {
+    logger.error("Interview result email task failed", {
       sessionId,
       userId: String(user?._id || ""),
-      trigger
-    },
-    sendTask: async () => {
-      const attemptedAt = new Date();
-      await InterviewSession.updateOne(
-        { _id: session?._id },
-        {
-          $set: {
-            "notifications.interviewResultEmail.lastAttemptAt": attemptedAt
-          },
-          $inc: {
-            "notifications.interviewResultEmail.attempts": 1
-          }
+      trigger,
+      message: error?.message || "unknown"
+    });
+    await InterviewSession.updateOne(
+      { _id: session?._id },
+      {
+        $set: {
+          "notifications.interviewResultEmail.lastStatus": "failed",
+          "notifications.interviewResultEmail.lastError": String(error?.message || "unknown")
         }
-      );
-      const result = await sendInterviewResultEmail(payload);
-      const update = {
-        "notifications.interviewResultEmail.lastStatus": String(result?.status || "failed"),
-        "notifications.interviewResultEmail.lastError": String(result?.error || ""),
-        "notifications.interviewResultEmail.providerMessageId": String(result?.providerMessageId || "")
-      };
-      if (result?.sent) {
-        update["notifications.interviewResultEmail.sentAt"] = new Date();
       }
-      await InterviewSession.updateOne({ _id: session?._id }, { $set: update });
-      if (result?.sent) {
-        logger.info("Interview result email sent", {
-          sessionId,
-          to: recipientEmail,
-          providerMessageId: String(result?.providerMessageId || "")
-        });
-      } else {
-        logger.warn("Interview result email not sent", {
-          sessionId,
-          to: recipientEmail,
-          status: String(result?.status || "failed"),
-          error: String(result?.error || "")
-        });
-      }
-    }
-  });
+    );
+    return false;
+  }
 }
 function createCertificateId(sessionId, userId) {
   const seed = `${sessionId}-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return `CERT-${crypto.createHash("sha1").update(seed).digest("hex").slice(0, 12).toUpperCase()}`;
 }
+function normalizeBaseUrl(input = "") {
+  return String(input || "").trim().replace(/\/+$/, "");
+}
+function isLocalHostValue(value = "") {
+  return /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(String(value || "").trim());
+}
 function buildCertificateVerificationUrl(req, certificateId) {
   if (!certificateId) {
     return "";
   }
-  return `${req.protocol}://${req.get("host")}/api/sessions/certificates/${certificateId}`;
+  const configuredBaseUrl = normalizeBaseUrl(env.backendBaseUrl);
+  if (configuredBaseUrl) {
+    try {
+      const parsed = new URL(configuredBaseUrl);
+      if (!isLocalHostValue(parsed.host)) {
+        return `${configuredBaseUrl}/api/sessions/certificates/${certificateId}`;
+      }
+    } catch {
+    }
+  }
+  const forwardedProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
+  const forwardedHost = String(req?.headers?.["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = forwardedHost || String(req?.get("host") || "").trim();
+  const protocol = forwardedProto || req?.protocol || "http";
+  if (host && !isLocalHostValue(host)) {
+    return `${protocol}://${host}/api/sessions/certificates/${certificateId}`;
+  }
+  if (configuredBaseUrl) {
+    return `${configuredBaseUrl}/api/sessions/certificates/${certificateId}`;
+  }
+  return `${protocol}://${host || "localhost:5000"}/api/sessions/certificates/${certificateId}`;
 }
 function findWeakMetric(scores = {}) {
   const entries = Object.entries(scores || {}).filter(([key]) => key !== "overall").map(([key, value]) => [key, Number(value || 0)]);
@@ -1055,6 +1128,8 @@ router.get(
         questionsCount: session.questions.length,
         answeredCount,
         overallScore: session.overallScore,
+        selection: buildSelectionResult(session.overallScore),
+        emailNotification: buildEmailNotificationResult(session),
         jobFitScore: Number(session.summary?.jobFitScore || 0),
         certificateId: session.certificate?.id || "",
         startedAt: session.startedAt,
@@ -1114,8 +1189,10 @@ router.get(
         focusAreas: session.focusAreas || [],
         jobDescriptionText: session.jobDescriptionText || "",
         overallScore: session.overallScore,
+        selection: buildSelectionResult(session.overallScore),
         metrics: session.metrics,
         summary: session.summary,
+        emailNotification: buildEmailNotificationResult(session),
         certificate: {
           id: session.certificate?.id || "",
           issuedAt: session.certificate?.issuedAt || null,
@@ -1442,20 +1519,23 @@ router.post(
       const emailQueued = userForEmail ? markInterviewResultEmailQueued(session) : false;
       await session.save();
       if (emailQueued && userForEmail) {
-        scheduleInterviewResultEmail({
+        await scheduleInterviewResultEmail({
           session,
           user: userForEmail,
           req,
           trigger: "already_completed"
         });
+        await syncLatestEmailNotificationState(session);
       }
       return res.json({
         message: "Session already completed.",
         session: {
           id: session._id,
           overallScore: session.overallScore,
+          selection: buildSelectionResult(session.overallScore),
           metrics: session.metrics,
           summary: session.summary,
+          emailNotification: buildEmailNotificationResult(session, userForEmail?.email || ""),
           status: session.status,
           endedAt: session.endedAt,
           certificate: {
@@ -1541,12 +1621,13 @@ router.post(
       const emailQueued = markInterviewResultEmailQueued(session);
       if (emailQueued) {
         await session.save();
-        scheduleInterviewResultEmail({
+        await scheduleInterviewResultEmail({
           session,
           user,
           req,
           trigger: "session_completed"
         });
+        await syncLatestEmailNotificationState(session);
       }
     } else {
       logger.warn("Session completion: user record missing for gamification/email", {
@@ -1559,8 +1640,10 @@ router.post(
         id: session._id,
         status: session.status,
         overallScore: session.overallScore,
+        selection: buildSelectionResult(session.overallScore),
         metrics: session.metrics,
         summary: session.summary,
+        emailNotification: buildEmailNotificationResult(session, user?.email || ""),
         endedAt: session.endedAt,
         certificate: {
           id: session.certificate?.id || "",

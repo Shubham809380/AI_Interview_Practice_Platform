@@ -24,74 +24,57 @@ function buildOutcome(overallScore = 0) {
 }
 function buildEmailBody({
   userName = "Candidate",
-  category = "HR",
-  targetRole = "Generalist",
   overallScore = 0,
-  sessionId = "",
   certificateId = "",
-  verificationUrl = "",
-  strengths = [],
-  improvements = []
+  verificationUrl = ""
 }) {
   const outcome = buildOutcome(overallScore);
-  const strengthLines = Array.isArray(strengths) ? strengths.slice(0, 3).filter(Boolean) : [];
-  const improvementLines = Array.isArray(improvements) ? improvements.slice(0, 3).filter(Boolean) : [];
+  const platformName = String(env.emailFromName || "AI Interview Practice Platform").trim() || "AI Interview Practice Platform";
+  const safeUserName = String(userName || "Candidate").trim() || "Candidate";
+  const decisionLine = outcome.selected
+    ? "We are pleased to inform you that based on your performance in the interview, you have been selected. Your responses demonstrated good understanding and problem-solving ability."
+    : "Thank you for your effort in the interview. Based on this round's performance, you have not been selected at this stage. Please keep practicing and review your feedback to improve further.";
+  const closingLine = outcome.selected
+    ? "Congratulations once again, and we wish you continued success in your learning journey."
+    : "We appreciate your effort and wish you continued success in your learning journey.";
   const textLines = [
-  `Hi ${userName},`,
+  `Dear ${safeUserName},`,
   "",
-  `Your interview practice session is completed.`,
-  `Result: ${outcome.statusLabel}`,
-  `Overall Score: ${overallScore}/100`,
-  `Category: ${category}`,
-  `Target Role: ${targetRole}`,
-  `Selection Cutoff: ${outcome.threshold}/100`,
-  ""];
-
-  if (strengthLines.length) {
-    textLines.push("Top strengths:");
-    for (const item of strengthLines) {
-      textLines.push(`- ${item}`);
-    }
-    textLines.push("");
-  }
-  if (improvementLines.length) {
-    textLines.push("Top improvements:");
-    for (const item of improvementLines) {
-      textLines.push(`- ${item}`);
-    }
-    textLines.push("");
-  }
+  `Thank you for completing the interview on our ${platformName}.`,
+  "",
+  decisionLine,
+  "",
+  "You can log in to your dashboard to view detailed feedback and next steps.",
+  "",
+  closingLine
+  ];
+  textLines.push("");
   if (certificateId) {
     textLines.push(`Certificate ID: ${certificateId}`);
   }
   if (verificationUrl) {
-    textLines.push(`Certificate verification: ${verificationUrl}`);
+    textLines.push(`Certificate Verification Link: ${verificationUrl}`);
   }
-  if (sessionId) {
-    textLines.push(`Session ID: ${sessionId}`);
+  if (certificateId || verificationUrl) {
+    textLines.push("");
   }
-  textLines.push("");
-  textLines.push("Regards,");
-  textLines.push("AI Interview Platform");
+  textLines.push("Best regards,");
+  textLines.push(platformName);
+  textLines.push("AI Interview Practice Team");
   const html = `
 <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a">
-  <p>Hi <strong>${userName}</strong>,</p>
-  <p>Your interview practice session is completed.</p>
-  <p>
-    <strong>Result:</strong> ${outcome.statusLabel}<br/>
-    <strong>Overall Score:</strong> ${overallScore}/100<br/>
-    <strong>Category:</strong> ${category}<br/>
-    <strong>Target Role:</strong> ${targetRole}<br/>
-    <strong>Selection Cutoff:</strong> ${outcome.threshold}/100
-  </p>
-  ${strengthLines.length ? `<p><strong>Top strengths:</strong></p><ul>${strengthLines.map((item) => `<li>${item}</li>`).join("")}</ul>` : ""}
-  ${improvementLines.length ? `<p><strong>Top improvements:</strong></p><ul>${improvementLines.map((item) => `<li>${item}</li>`).join("")}</ul>` : ""}
+  <p>Dear <strong>${safeUserName}</strong>,</p>
+  <p>Thank you for completing the interview on our ${platformName}.</p>
+  <p>${decisionLine}</p>
+  <p>You can log in to your dashboard to view detailed feedback and next steps.</p>
+  ${certificateId || verificationUrl ? `
   <p>
     ${certificateId ? `<strong>Certificate ID:</strong> ${certificateId}<br/>` : ""}
-    ${verificationUrl ? `<strong>Certificate verification:</strong> <a href="${verificationUrl}">${verificationUrl}</a><br/>` : ""}
-    ${sessionId ? `<strong>Session ID:</strong> ${sessionId}` : ""}
+    ${verificationUrl ? `<strong>Certificate Verification Link:</strong> <a href="${verificationUrl}">${verificationUrl}</a>` : ""}
   </p>
-  <p>Regards,<br/>AI Interview Platform</p>
+  ` : ""}
+  <p>${closingLine}</p>
+  <p>Best regards,<br/>${platformName}<br/>AI Interview Practice Team</p>
 </div>
   `.trim();
   return {
@@ -108,6 +91,13 @@ async function sendViaResend({ to, subject, text, html }) {
       sent: false,
       status: "skipped",
       error: "RESEND_API_KEY is missing."
+    };
+  }
+  if (/^replace[_-]?with/i.test(apiKey) || /^replace_me$/i.test(apiKey)) {
+    return {
+      sent: false,
+      status: "skipped",
+      error: "RESEND_API_KEY is placeholder. Set a real Resend API key."
     };
   }
   if (!from) {

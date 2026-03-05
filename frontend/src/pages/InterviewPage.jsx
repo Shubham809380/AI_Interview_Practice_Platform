@@ -244,6 +244,15 @@ function sourceLabel(source = "") {
   if (normalized === "resume") return "Resume-Based";
   return "Predefined Database";
 }
+function formatEmailNotificationStatus(status = "") {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "sent") return "Sent";
+  if (normalized === "queued") return "Queued";
+  if (normalized === "failed") return "Failed";
+  if (normalized === "skipped") return "Skipped";
+  if (normalized === "disabled") return "Disabled";
+  return "Pending";
+}
 function Badge({ children }) {
   return <span className="rounded-full border border-white/30 bg-white/50 px-2 py-1 text-xs font-semibold text-slate-700 dark:border-white/10 dark:bg-slate-800/45 dark:text-slate-200">{children}</span>;
 }
@@ -292,6 +301,7 @@ export function InterviewPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [emailRetrying, setEmailRetrying] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(true);
@@ -346,6 +356,7 @@ export function InterviewPage() {
   const currentQuestion = activeSession?.questions?.[currentIndex] || null;
   const currentDraft = currentQuestion ? drafts[currentQuestion.id] || cloneDraft() : cloneDraft();
   const progress = useMemo(() => getProgress(activeSession), [activeSession]);
+  const canCompleteSession = Boolean(activeSession && activeSession.status === "in_progress" && progress.answered >= 1);
   const resumeSkills = useMemo(() => detectResumeSkills(setup.resumeText), [setup.resumeText]);
   const starCoverage = useMemo(() => detectStarCoverage(currentDraft.rawText), [currentDraft.rawText]);
   const missingStarParts = useMemo(() => getStarMissingParts(starCoverage), [starCoverage]);
@@ -377,6 +388,27 @@ export function InterviewPage() {
     const merged = [...summaryImprovements, ...metricImprovements].map((item) => String(item || "").trim()).filter(Boolean);
     return [...new Set(merged)];
   }, [activeSession]);
+  const sessionSelection = useMemo(() => {
+    if (!activeSession) {
+      return { selected: false, statusLabel: "Not Selected", cutoffScore: 70 };
+    }
+    const cutoffScore = Number(activeSession.selection?.cutoffScore ?? 70);
+    const selected = typeof activeSession.selection?.selected === "boolean" ? activeSession.selection.selected : Number(activeSession.overallScore || 0) >= cutoffScore;
+    return {
+      selected,
+      statusLabel: String(activeSession.selection?.statusLabel || (selected ? "Selected" : "Not Selected")),
+      cutoffScore
+    };
+  }, [activeSession]);
+  const emailNotificationMeta = useMemo(() => {
+    const status = String(activeSession?.emailNotification?.status || "").trim().toLowerCase();
+    return {
+      recipientEmail: String(activeSession?.emailNotification?.recipientEmail || user?.email || "").trim(),
+      statusLabel: formatEmailNotificationStatus(status),
+      rawStatus: status,
+      error: String(activeSession?.emailNotification?.error || "").trim()
+    };
+  }, [activeSession?.emailNotification, user?.email]);
   const interviewerActing = speaking || speakingVisualActive || userSpeaking;
   function markAssistantSpeechGuard(text = "") {
     const words = String(text || "").trim().split(/\s+/).filter(Boolean).length;
@@ -404,7 +436,7 @@ export function InterviewPage() {
       liveSpeech.stop();
     }
   }
-  function appendSpokenResponse(questionId, segmentText) {
+  function appendResponseToDraft(questionId, segmentText, durationSec = 0) {
     const normalized = String(segmentText || "").replace(/\s+/g, " ").trim();
     if (!questionId || !normalized) {
       return;
@@ -419,10 +451,13 @@ export function InterviewPage() {
           ...existing,
           rawText: combinedRawText,
           transcript: combinedTranscript,
-          durationSec: Math.max(Number(existing.durationSec) || 0, liveSpeech.durationSec || 0)
+          durationSec: Math.max(Number(existing.durationSec) || 0, Number(durationSec || 0))
         }
       };
     });
+  }
+  function appendSpokenResponse(questionId, segmentText) {
+    appendResponseToDraft(questionId, segmentText, liveSpeech.durationSec || 0);
   }
   function resetLiveWeakAnswerAttempts(questionId = "") {
     if (!questionId) {
@@ -801,12 +836,10 @@ export function InterviewPage() {
       if (document.visibilityState !== "hidden") {
         return;
       }
-      if (networkOffline) {
-        lockInterviewForIntegrity("Offline + tab switch detected during interview.", {
-          type: "focus",
-          meta: "visibility_hidden_while_offline"
-        });
-      }
+      lockInterviewForIntegrity("Tab switch detected during interview.", {
+        type: "focus",
+        meta: networkOffline ? "visibility_hidden_while_offline" : "visibility_hidden"
+      });
     };
     const handleWindowBlur = () => {
       if (networkOffline) {
@@ -1239,6 +1272,8 @@ export function InterviewPage() {
             metrics: payload.session.metrics,
             summary: payload.session.summary,
             overallScore: payload.session.overallScore,
+            selection: payload.session.selection,
+            emailNotification: payload.session.emailNotification,
             certificate: payload.session.certificate,
             endedAt: payload.session.endedAt
           } : previous
@@ -1333,6 +1368,8 @@ export function InterviewPage() {
         metrics: payload.session.metrics,
         summary: payload.session.summary,
         overallScore: payload.session.overallScore,
+        selection: payload.session.selection,
+        emailNotification: payload.session.emailNotification,
         certificate: payload.session.certificate,
         endedAt: payload.session.endedAt,
         questions: payload.questions
@@ -1355,13 +1392,15 @@ export function InterviewPage() {
       setLoading(false);
     }
   }
-  async function submitAnswer() {
+  async function submitAnswer({ silent = false } = {}) {
     if (!activeSession || !currentQuestion) {
-      return;
+      return false;
     }
     setSaving(true);
     setError("");
-    setMessage("");
+    if (!silent) {
+      setMessage("");
+    }
     try {
       const mediaCapture = recordedMediaByQuestion[currentQuestion.id] || null;
       const hasMediaCapture = Boolean(mediaCapture?.audioBlob || mediaCapture?.videoBlob);
@@ -1374,8 +1413,10 @@ Code Solution:
 ${codingSnippet}`.trim() : rawTextBase;
       const hasAnswer = Boolean(rawText || transcriptText || codingSnippet || hasMediaCapture);
       if (!hasAnswer) {
-        setMessage(buildUnableToAnswerSuggestion(currentQuestion.prompt, activeSession.category));
-        return;
+        if (!silent) {
+          setMessage(buildUnableToAnswerSuggestion(currentQuestion.prompt, activeSession.category));
+        }
+        return false;
       }
       const timelineMarkers = [
       { second: 12, label: "Open with direct context and role fit.", kind: "clarity" },
@@ -1437,9 +1478,13 @@ ${codingSnippet}`.trim() : rawTextBase;
           [currentQuestion.id]: payload.followUpQuestion
         }));
       }
-      setMessage(`Answer scored: ${payload.answer.aiScores.overall}/100`);
+      if (!silent) {
+        setMessage(`Answer scored: ${payload.answer.aiScores.overall}/100`);
+      }
+      return true;
     } catch (requestError) {
       setError(requestError.message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1605,6 +1650,7 @@ ${codingSnippet}`.trim() : rawTextBase;
     }
     const history = buildJudgeHistoryPayload(messageText);
     appendJudgeMessage("user", messageText);
+    appendResponseToDraft(currentQuestion?.id, messageText, 0);
     setJudgeInput("");
     setJudgeLoading(true);
     setError("");
@@ -1701,8 +1747,22 @@ ${codingSnippet}`.trim() : rawTextBase;
     if (!activeSession) {
       return;
     }
-    setCompleting(true);
     setError("");
+    if (!canCompleteSession) {
+      const hasDraftAnswer = Boolean(
+        String(currentDraft.rawText || currentDraft.transcript || currentDraft.codeSolution || "").trim()
+      );
+      if (!hasDraftAnswer) {
+        setError("Complete session requires at least 1 submitted answer.");
+        return;
+      }
+      const autoSubmitted = await submitAnswer({ silent: true });
+      if (!autoSubmitted) {
+        setError("Could not auto-submit chat answer. Please click 'Submit for AI Analysis' once.");
+        return;
+      }
+    }
+    setCompleting(true);
     exitCompletionRef.current = true;
     resetLiveConversation();
     try {
@@ -1718,10 +1778,13 @@ ${codingSnippet}`.trim() : rawTextBase;
         metrics: payload.session.metrics,
         summary: payload.session.summary,
         overallScore: payload.session.overallScore,
+        selection: payload.session.selection,
+        emailNotification: payload.session.emailNotification,
         certificate: payload.session.certificate,
         endedAt: payload.session.endedAt
       }));
-      setMessage(`Session complete: ${payload.session.overallScore}/100.`);
+      const emailStatusText = formatEmailNotificationStatus(payload.session?.emailNotification?.status);
+      setMessage(`Session complete: ${payload.session.overallScore}/100. Result email: ${emailStatusText}.`);
       const sessionsPayload = await sessionApi.list(token);
       setSessionList(sessionsPayload.sessions || []);
     } catch (requestError) {
@@ -1729,6 +1792,33 @@ ${codingSnippet}`.trim() : rawTextBase;
       setError(requestError.message);
     } finally {
       setCompleting(false);
+    }
+  }
+  async function retryResultEmailDelivery() {
+    if (!activeSession?.id) {
+      return;
+    }
+    setEmailRetrying(true);
+    setError("");
+    try {
+      const payload = await completeSessionRequest(activeSession.id);
+      setActiveSession((previous) => previous ? {
+        ...previous,
+        status: payload.session?.status || previous.status,
+        metrics: payload.session?.metrics || previous.metrics,
+        summary: payload.session?.summary || previous.summary,
+        overallScore: Number(payload.session?.overallScore ?? previous.overallScore ?? 0),
+        selection: payload.session?.selection || previous.selection,
+        emailNotification: payload.session?.emailNotification || previous.emailNotification,
+        certificate: payload.session?.certificate || previous.certificate,
+        endedAt: payload.session?.endedAt || previous.endedAt
+      } : previous);
+      const emailStatusText = formatEmailNotificationStatus(payload.session?.emailNotification?.status);
+      setMessage(`Result email status: ${emailStatusText}.`);
+    } catch (requestError) {
+      setError(requestError.message || "Unable to retry result email.");
+    } finally {
+      setEmailRetrying(false);
     }
   }
   if (loading) {
@@ -1741,7 +1831,7 @@ ${codingSnippet}`.trim() : rawTextBase;
   }
   const inProgressSessions = sessionList.filter((session) => session.status === "in_progress");
   return <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">{networkOffline && activeSession?.status === "in_progress" ? <div className="xl:col-span-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/20 dark:text-amber-200">
-          Network issue detected. During offline mode, tab switch/clipboard/restricted shortcuts will auto-close interview.
+          Network issue detected. During offline mode, clipboard/restricted shortcuts will auto-close interview. Tab switch will close interview in all modes.
         </div> : null}<motion.section initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} className="rounded-2xl border border-white/30 bg-white/45 p-4 shadow-soft backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/45"><h2 className="mb-3 font-display text-lg font-bold">Start Interview</h2><form onSubmit={createSession} className="grid gap-3"><label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Category
             <select value={setup.category} onChange={(event) => updateSetup("category", event.target.value)} className="rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-800/70">{(meta.categories || []).map((category) => <option key={category} value={category}>{category}</option>)}</select></label><label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1933,7 +2023,9 @@ ${codingSnippet}`.trim() : rawTextBase;
               onClick={requestFollowUpQuestion}
               disabled={followUpLoading}
               className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white">
-              {followUpLoading ? "Generating..." : "Generate Follow-up"}</button><button type="button" onClick={() => setCurrentIndex((index) => Math.max(0, index - 1))} className="rounded-xl bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700 dark:bg-slate-700/60 dark:text-slate-100">Previous</button><button type="button" onClick={() => setCurrentIndex((index) => Math.min(activeSession.questions.length - 1, index + 1))} className="rounded-xl bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700 dark:bg-slate-700/60 dark:text-slate-100">Next</button><button type="button" onClick={completeSession} disabled={completing} className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"><CheckCircle2 size={14} /> {completing ? "Completing..." : "Complete Session"}</button></div>{currentFollowUp ? <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-100"><p className="font-semibold">Dynamic Follow-up Question</p><p className="mt-1">{currentFollowUp}</p></div> : null}<div className="mt-3 rounded-xl border border-white/25 bg-white/70 p-3 dark:border-white/10 dark:bg-slate-900/35"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Video Review Timeline</p><div className="mt-2 flex flex-wrap items-center gap-2"><button
+              {followUpLoading ? "Generating..." : "Generate Follow-up"}</button><button type="button" onClick={() => setCurrentIndex((index) => Math.max(0, index - 1))} className="rounded-xl bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700 dark:bg-slate-700/60 dark:text-slate-100">Previous</button><button type="button" onClick={() => setCurrentIndex((index) => Math.min(activeSession.questions.length - 1, index + 1))} className="rounded-xl bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700 dark:bg-slate-700/60 dark:text-slate-100">Next</button><button type="button" onClick={completeSession} disabled={!canCompleteSession || completing} className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"><CheckCircle2 size={14} /> {completing ? "Completing..." : canCompleteSession ? "Complete Session" : "Answer 1 First"}</button></div><p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+              Completion unlock: at least 1 submitted answer required ({progress.answered}/{progress.total} done).
+            </p>{currentFollowUp ? <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900 dark:border-violet-500/30 dark:bg-violet-900/20 dark:text-violet-100"><p className="font-semibold">Dynamic Follow-up Question</p><p className="mt-1">{currentFollowUp}</p></div> : null}<div className="mt-3 rounded-xl border border-white/25 bg-white/70 p-3 dark:border-white/10 dark:bg-slate-900/35"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Video Review Timeline</p><div className="mt-2 flex flex-wrap items-center gap-2"><button
                 type="button"
                 onClick={startAnswerRecording}
                 disabled={answerRecorder.recording || saving}
@@ -1985,7 +2077,24 @@ ${codingSnippet}`.trim() : rawTextBase;
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600">
                 <Award size={14} />
                       Download Certificate
-                    </button></div></div><p className="mt-2 text-sm font-semibold">AI Recommendation</p><p className="mt-1 text-sm">{activeSession.summary?.recommendation || "Keep practicing to improve consistency."}</p>{activeSession.summary?.jobFitScore ? <p className="mt-2 text-sm">
+                    </button><button
+                type="button"
+                onClick={retryResultEmailDelivery}
+                disabled={emailRetrying}
+                className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-cyan-700 disabled:opacity-60">
+                <Send size={14} />
+                      {emailRetrying ? "Retrying Email..." : "Send Result Email Again"}
+                    </button></div></div><p className="mt-2 text-sm font-semibold">AI Recommendation</p><p className="mt-1 text-sm">{activeSession.summary?.recommendation || "Keep practicing to improve consistency."}</p><div className="mt-3 rounded-xl border border-slate-200/80 bg-white/70 p-3 text-sm dark:border-white/10 dark:bg-slate-900/35"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
+                    Selection Result
+                  </p><p className={`mt-1 font-semibold ${sessionSelection.selected ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"}`}>
+                    {sessionSelection.statusLabel}
+                  </p><p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                    Cutoff: {sessionSelection.cutoffScore}/100 | Score: {activeSession.overallScore || 0}/100
+                  </p><p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                    Email ({emailNotificationMeta.statusLabel}): {emailNotificationMeta.recipientEmail || "No login email found"}
+                  </p>{emailNotificationMeta.error ? <p className="mt-1 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                      Email issue: {emailNotificationMeta.error}
+                    </p> : null}</div>{activeSession.summary?.jobFitScore ? <p className="mt-2 text-sm">
                     Job Description Fit: <strong>{activeSession.summary.jobFitScore}/100</strong></p> : null}{activeSession.certificate?.id ? <div className="mt-2 rounded-lg bg-white/70 p-2 text-xs text-slate-700 dark:bg-slate-900/35 dark:text-slate-200"><p>
                       Certificate ID: <strong>{activeSession.certificate.id}</strong></p>{activeSession.certificate.verificationUrl ? <><p className="truncate">Verify: {activeSession.certificate.verificationUrl}</p><img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(
