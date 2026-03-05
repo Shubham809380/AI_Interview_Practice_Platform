@@ -344,7 +344,7 @@ router.get(
     const [sessions, totalUsers] = await Promise.all([
       InterviewSession.find({})
         .sort({ createdAt: -1 })
-        .populate("user", "name")
+        .populate("user", "name email")
         .lean(),
       User.countDocuments({})
     ]);
@@ -368,6 +368,7 @@ router.get(
     const categoryMap = {};
     const now = Date.now();
     const riskSessions = [];
+    const securityEvents = [];
 
     const trendMap = {};
     const trendDays = 14;
@@ -438,6 +439,24 @@ router.get(
           riskScore
         });
       }
+
+      const sessionEvents = Array.isArray(session.integrityEvents) ? session.integrityEvents : [];
+      if (sessionEvents.length) {
+        for (const event of sessionEvents) {
+          securityEvents.push({
+            sessionId: String(session._id),
+            userName: String(session.user?.name || "Candidate"),
+            userEmail: String(session.user?.email || ""),
+            category: String(session.category || "Unknown"),
+            targetRole: String(session.targetRole || "General"),
+            sessionStatus: String(session.status || "in_progress"),
+            type: String(event?.type || "policy"),
+            reason: String(event?.reason || ""),
+            meta: String(event?.meta || ""),
+            createdAt: event?.createdAt || session.updatedAt || session.createdAt || null
+          });
+        }
+      }
     }
 
     const sourceBreakdown = Object.entries(sourceBreakdownMap).map(([source, count]) => ({
@@ -460,6 +479,9 @@ router.get(
     }));
 
     const topRiskSessions = riskSessions.sort((a, b) => b.riskScore - a.riskScore).slice(0, 8);
+    const recentIntegrityEvents = securityEvents
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      .slice(0, 80);
     const staleRiskCount = riskSessions.filter((session) => session.ageHours >= 24 && session.progressPercent <= 40).length;
     const aiSharePercent = sourceBreakdown
       .filter((item) => item.source === "ai" || item.source === "resume")
@@ -479,6 +501,7 @@ router.get(
       categoryBreakdown,
       trend,
       topRiskSessions,
+      recentIntegrityEvents,
       alerts: buildAdminAlerts({
         totalSessions,
         completed,

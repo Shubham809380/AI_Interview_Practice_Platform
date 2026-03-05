@@ -122,6 +122,8 @@ const env = {
   emailFromAddress: getFirstDefinedEnv(["EMAIL_FROM_ADDRESS"], ""),
   resendApiKey: getFirstDefinedEnv(["RESEND_API_KEY"], ""),
   resendApiUrl: getFirstDefinedEnv(["RESEND_API_URL"], "https://api.resend.com"),
+  supportRequestEmailEnabled: !/^false$/i.test(getFirstDefinedEnv(["SUPPORT_REQUEST_EMAIL_ENABLED"], "true")),
+  supportRequestToEmail: getFirstDefinedEnv(["SUPPORT_REQUEST_TO_EMAIL", "SUPPORT_ADMIN_EMAIL", "SUPPORT_EMAIL"], ""),
   speechToTextApiUrl: getFirstDefinedEnv(["SPEECH_TO_TEXT_API_URL"]),
   speechToTextApiKey: getFirstDefinedEnv(["SPEECH_TO_TEXT_API_KEY"]),
   nlpEvaluationApiUrl: getFirstDefinedEnv(["NLP_EVALUATION_API_URL"]),

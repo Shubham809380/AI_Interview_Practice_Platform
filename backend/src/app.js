@@ -15,6 +15,7 @@ const sessionRoutes = require("./routes/sessions.routes");
 const analyticsRoutes = require("./routes/analytics.routes");
 const leaderboardRoutes = require("./routes/leaderboard.routes");
 const paymentRoutes = require("./routes/payments.routes");
+const supportRoutes = require("./routes/support.routes");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -96,6 +97,7 @@ app.use("/api/sessions", sessionRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/support", supportRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

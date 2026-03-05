@@ -2,6 +2,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Bot, Mail, MessageSquare, Send, X } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { supportApi } from "../lib/api";
 
 const DEFAULT_BOT_REPLY =
   "Hi, I am the support chatbot. Share your issue and our team will contact you.";
@@ -15,19 +17,50 @@ const QUICK_ACTIONS = [
 export function ContactChatbotWidget() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusError, setStatusError] = useState("");
   const location = useLocation();
+  const { token, user } = useAuth();
   const supportEmail = import.meta.env.VITE_SUPPORT_EMAIL || "support@aiinterview.app";
 
-  function sendMail() {
+  async function submitSupportIssue() {
     const baseMessage = draft.trim() || "Hi team, I need help with...";
-    const body = `${baseMessage}\n\nPage: ${window.location.origin}${location.pathname}${location.search}\nTime: ${new Date().toLocaleString()}`;
-    const subject = "Interview Platform Support Request";
-    window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    setDraft("");
-    setOpen(false);
+    if (baseMessage.length < 5) {
+      setStatusError("Please describe your issue in at least 5 characters.");
+      setStatusMessage("");
+      return;
+    }
+
+    const pageUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${location.pathname}${location.search}`
+        : `${location.pathname}${location.search}`;
+    const submittedAt = new Date().toISOString();
+
+    setSending(true);
+    setStatusMessage("");
+    setStatusError("");
+    try {
+      const payload = await supportApi.contact(token, {
+        message: baseMessage,
+        userName: String(user?.name || "").trim(),
+        userEmail: String(user?.email || "").trim(),
+        pageUrl,
+        submittedAt
+      });
+      setStatusMessage(payload.message || "Issue sent to admin support.");
+      setDraft("");
+    } catch (requestError) {
+      setStatusError(requestError.message || "Unable to send issue right now.");
+    } finally {
+      setSending(false);
+    }
   }
 
   function applyQuickAction(text) {
+    setStatusError("");
+    setStatusMessage("");
     setDraft(text);
   }
 
@@ -91,6 +124,17 @@ export function ContactChatbotWidget() {
               />
             </label>
 
+            {statusMessage ? (
+              <p className="mt-2 rounded-lg bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                {statusMessage}
+              </p>
+            ) : null}
+            {statusError ? (
+              <p className="mt-2 rounded-lg bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-700">
+                {statusError}
+              </p>
+            ) : null}
+
             <div className="mt-2 flex items-center justify-between">
               <p className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-300">
                 <Mail size={12} />
@@ -98,11 +142,12 @@ export function ContactChatbotWidget() {
               </p>
               <button
                 type="button"
-                onClick={sendMail}
+                onClick={submitSupportIssue}
+                disabled={sending}
                 className="inline-flex items-center gap-1 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600"
               >
                 <Send size={12} />
-                Send
+                {sending ? "Sending..." : "Send"}
               </button>
             </div>
           </motion.div>

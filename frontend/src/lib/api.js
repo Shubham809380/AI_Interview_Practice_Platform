@@ -226,4 +226,7 @@ export const paymentApi = {
   confirm: (token, paymentId, body = {}) => request(`/payments/${paymentId}/confirm`, { method: "POST", token, body }),
   subscription: (token) => request("/payments/subscription/me", { token })
 };
+export const supportApi = {
+  contact: (token, body) => request("/support/contact", { method: "POST", token, body })
+};
 export { API_BASE, request };

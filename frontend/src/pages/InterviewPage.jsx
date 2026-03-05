@@ -59,6 +59,7 @@ const LIVE_RESPONSE_MIN_WORDS = 3;
 const LIVE_SILENCE_COMMIT_MS = 450;
 const LIVE_BARGE_IN_COOLDOWN_MS = 1200;
 const LIVE_WEAK_ANSWER_RETRY_LIMIT = 2;
+const SECURITY_REDIRECT_DELAY_MS = 4500;
 const LIVE_INTERVIEW_LANGUAGES = [
 { value: "en-US", label: "English (US)" },
 { value: "en-IN", label: "English (India)" },
@@ -673,7 +674,13 @@ export function InterviewPage() {
       } catch {
       }
       window.location.replace("/");
-    }, 1400);
+    }, SECURITY_REDIRECT_DELAY_MS);
+  }
+  function showSecurityAlert(message) {
+    if (typeof window === "undefined" || typeof window.alert !== "function") {
+      return;
+    }
+    window.alert(message);
   }
   function triggerInterviewerAct(durationMs = 4500) {
     if (speakingVisualTimeoutRef.current) {
@@ -836,6 +843,9 @@ export function InterviewPage() {
       if (document.visibilityState !== "hidden") {
         return;
       }
+      showSecurityAlert(
+        "Please stay on this tab during the interview.\nSwitching tabs or opening another window will trigger a warning.\nMultiple tab switches may automatically end your interview."
+      );
       lockInterviewForIntegrity("Tab switch detected during interview.", {
         type: "focus",
         meta: networkOffline ? "visibility_hidden_while_offline" : "visibility_hidden"
@@ -1827,7 +1837,7 @@ ${codingSnippet}`.trim() : rawTextBase;
   if (securityLocked) {
     return <div className="grid min-h-[60vh] place-items-center"><section className="w-full max-w-2xl rounded-2xl border border-rose-300 bg-rose-50 p-6 text-center shadow-soft dark:border-rose-500/30 dark:bg-rose-900/20"><h2 className="font-display text-2xl font-bold text-rose-800 dark:text-rose-100">Interview Locked</h2><p className="mt-2 text-sm text-rose-700 dark:text-rose-200">{securityLockReason || "Policy violation detected during interview."}</p><p className="mt-2 text-xs text-rose-700 dark:text-rose-200">
             Session is being closed for integrity protection. Violations recorded: {securityViolationCount}.
-          </p><p className="mt-3 text-xs text-slate-600 dark:text-slate-300">Redirecting to dashboard...</p></section></div>;
+          </p><p className="mt-3 text-xs text-slate-600 dark:text-slate-300">Redirecting to dashboard in {Math.round(SECURITY_REDIRECT_DELAY_MS / 1000)} seconds...</p></section></div>;
   }
   const inProgressSessions = sessionList.filter((session) => session.status === "in_progress");
   return <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">{networkOffline && activeSession?.status === "in_progress" ? <div className="xl:col-span-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/20 dark:text-amber-200">
