@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "seed": "node src/scripts/seed.js",
     "make-admin": "node src/scripts/makeAdmin.js",
+    "reset-admin-password": "node src/scripts/resetAdminPassword.js",
     "train-interviewer": "node src/scripts/trainInterviewerModel.js"
   },
   "dependencies": {

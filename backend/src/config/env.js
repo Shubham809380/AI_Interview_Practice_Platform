@@ -27,6 +27,9 @@ const parsedRootEnv = parseEnvFile(rootEnvPath);
 function normalizeEnvValue(value) {
   return String(value || "").trim().replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1").trim();
 }
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
 function getFirstDefinedEnv(keys, fallback = "") {
   for (const key of keys) {
     const processValue = normalizeEnvValue(process.env[key]);
@@ -86,6 +89,7 @@ const env = {
   sessionSecret: getFirstDefinedEnv(["SESSION_SECRET", "JWT_SECRET"], "dev-session-secret-change-me"),
   backendBaseUrl: getFirstDefinedEnv(["BACKEND_BASE_URL"], vercelOriginFallback || "http://localhost:5000"),
   frontendOrigin: getFirstDefinedEnv(["FRONTEND_ORIGIN"], vercelOriginFallback || "http://localhost:5173"),
+  primaryAdminEmail: normalizeEmail(getFirstDefinedEnv(["PRIMARY_ADMIN_EMAIL", "ADMIN_EMAIL"], "patrashubham031@gmail.com")),
   googleOAuthClientId: getFirstDefinedEnv([
   "GOOGLE_OAUTH_CLIENT_ID",
   "GOOGLE_CLIENT_ID",

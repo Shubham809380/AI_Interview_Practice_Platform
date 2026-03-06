@@ -16,6 +16,26 @@ function normalizeEmail(value) {
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
+function getPrimaryAdminEmail() {
+  return normalizeEmail(env.primaryAdminEmail);
+}
+function isPrimaryAdminEmail(email) {
+  const primaryAdminEmail = getPrimaryAdminEmail();
+  if (!primaryAdminEmail) {
+    return false;
+  }
+  return normalizeEmail(email) === primaryAdminEmail;
+}
+async function demoteNonPrimaryAdmins() {
+  const primaryAdminEmail = getPrimaryAdminEmail();
+  if (!primaryAdminEmail) {
+    return;
+  }
+  await User.updateMany(
+    { role: "admin", email: { $ne: primaryAdminEmail } },
+    { $set: { role: "user" } }
+  );
+}
 function cleanupExpiredOauthStates() {
   const now = Date.now();
   for (const [state, data] of oauthStateStore.entries()) {
@@ -483,9 +503,15 @@ router.post(
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required." });
     }
-    const hasAnyAdmin = await User.exists({ role: "admin" });
-    const canBootstrapAdmin = !hasAnyAdmin && env.nodeEnv !== "production";
-    const bootstrapHint = canBootstrapAdmin ? " No admin account exists yet. Use this form with existing credentials or new credentials to bootstrap the first admin." : "";
+    if (!isPrimaryAdminEmail(email)) {
+      return res.status(403).json({ message: "Only configured primary admin can log in to Admin Panel." });
+    }
+    const primaryAdminEmail = getPrimaryAdminEmail();
+    const hasPrimaryAdmin = primaryAdminEmail ? await User.exists({ role: "admin", email: primaryAdminEmail }) : false;
+    const canBootstrapAdmin = !hasPrimaryAdmin && env.nodeEnv !== "production";
+    const bootstrapHint = canBootstrapAdmin
+      ? " Primary admin account is not active yet. Use this form with the primary admin email to bootstrap admin access."
+      : "";
     let user = await User.findOne({ email });
     if (!user && canBootstrapAdmin) {
       if (!isValidEmail(email)) {
@@ -508,6 +534,7 @@ router.post(
         }
         throw registerError;
       }
+      await demoteNonPrimaryAdmins();
       return res.json(buildAuthPayload(user));
     }
     if (!user) {
@@ -525,6 +552,7 @@ router.post(
       user.authProvider = "local";
       user.passwordHash = "";
       await user.save();
+      await demoteNonPrimaryAdmins();
       return res.json(buildAuthPayload(user));
     }
     const isValid = await verifyLocalPassword(user, password);
@@ -532,13 +560,10 @@ router.post(
       return res.status(401).json({ message: `Invalid credentials.${bootstrapHint}` });
     }
     if (user.role !== "admin") {
-      if (canBootstrapAdmin) {
-        user.role = "admin";
-        await user.save();
-      } else {
-        return res.status(403).json({ message: "Only admin can log in to Admin Panel." });
-      }
+      user.role = "admin";
+      await user.save();
     }
+    await demoteNonPrimaryAdmins();
     return res.json(buildAuthPayload(user));
   })
 );
@@ -546,8 +571,9 @@ router.post(
   "/admin/bootstrap",
   authRequired,
   asyncHandler(async (req, res) => {
-    const hasAnyAdmin = await User.exists({ role: "admin" });
-    if (hasAnyAdmin) {
+    const primaryAdminEmail = getPrimaryAdminEmail();
+    const hasPrimaryAdmin = primaryAdminEmail ? await User.exists({ role: "admin", email: primaryAdminEmail }) : false;
+    if (hasPrimaryAdmin) {
       return res.status(409).json({ message: "Admin already exists. Ask an admin to promote your account." });
     }
     if (env.nodeEnv === "production") {
@@ -557,8 +583,12 @@ router.post(
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
+    if (!isPrimaryAdminEmail(user.email)) {
+      return res.status(403).json({ message: "Only configured primary admin email can bootstrap admin access." });
+    }
     user.role = "admin";
     await user.save();
+    await demoteNonPrimaryAdmins();
     return res.json(buildAuthPayload(user));
   })
 );

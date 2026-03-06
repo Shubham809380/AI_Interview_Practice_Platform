@@ -1,14 +1,27 @@
 const { verifyJwt } = require("../utils/jwt");
 const { User } = require("../models");
+const { env } = require("../config/env");
 
 function extractBearerToken(req) {
   const header = req.headers.authorization || "";
   return header.startsWith("Bearer ") ? header.slice(7) : "";
 }
 
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isPrimaryAdminEmail(email) {
+  const primaryAdminEmail = normalizeEmail(env.primaryAdminEmail);
+  if (!primaryAdminEmail) {
+    return false;
+  }
+  return normalizeEmail(email) === primaryAdminEmail;
+}
+
 async function resolveAuthenticatedUser(token) {
   const decoded = verifyJwt(token);
-  const user = await User.findById(decoded.sub).select("role accountStatus");
+  const user = await User.findById(decoded.sub).select("role accountStatus email");
   return { decoded, user };
 }
 
@@ -54,7 +67,7 @@ async function adminRequired(req, res, next) {
     if (String(user.accountStatus || "active").toLowerCase() === "suspended") {
       return res.status(403).json({ message: "Your account is suspended. Contact admin support." });
     }
-    if (user.role !== "admin") {
+    if (user.role !== "admin" || !isPrimaryAdminEmail(user.email)) {
       return res.status(403).json({ message: "Admin access is required." });
     }
 

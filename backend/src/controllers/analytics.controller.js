@@ -193,6 +193,20 @@ function normalizeAdminAccountStatus(input) {
   return "";
 }
 
+function normalizeEmail(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function isPrimaryAdminEmail(email) {
+  const primaryAdminEmail = normalizeEmail(env.primaryAdminEmail);
+  if (!primaryAdminEmail) {
+    return false;
+  }
+  return normalizeEmail(email) === primaryAdminEmail;
+}
+
 router.get(
   "/progress",
   authRequired,
@@ -1000,12 +1014,19 @@ router.patch(
     const accountStatus =
       req.body.accountStatus !== undefined ? normalizeAdminAccountStatus(req.body.accountStatus) : "";
     const resetViolations = Boolean(req.body.resetViolations);
+    const targetIsPrimaryAdmin = isPrimaryAdminEmail(user.email);
 
     if (req.body.role !== undefined && !role) {
       return res.status(400).json({ message: "Invalid role. Allowed: user/admin." });
     }
     if (req.body.accountStatus !== undefined && !accountStatus) {
       return res.status(400).json({ message: "Invalid account status. Allowed: active/suspended." });
+    }
+    if (req.body.role !== undefined && role === "admin" && !targetIsPrimaryAdmin) {
+      return res.status(403).json({ message: "Only configured primary admin email can have admin role." });
+    }
+    if (req.body.role !== undefined && role === "user" && targetIsPrimaryAdmin) {
+      return res.status(400).json({ message: "Primary admin role cannot be removed." });
     }
 
     if (String(req.auth.sub) === String(user._id)) {
@@ -1019,6 +1040,12 @@ router.patch(
 
     if (role) {
       user.role = role;
+    }
+    if (!targetIsPrimaryAdmin && user.role === "admin") {
+      user.role = "user";
+    }
+    if (targetIsPrimaryAdmin) {
+      user.role = "admin";
     }
     if (accountStatus) {
       user.accountStatus = accountStatus;
