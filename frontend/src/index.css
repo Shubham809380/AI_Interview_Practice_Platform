@@ -22,10 +22,16 @@
 * {
   box-sizing: border-box;
 }
+html {
+  width: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 html,
 body,
 #root {
   min-height: 100%;
+  width: 100%;
 }
 body {
   margin: 0;
@@ -66,6 +72,9 @@ h4 {
 table {
   border-collapse: collapse;
 }
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
 input,
 textarea,
 select,
@@ -103,5 +112,15 @@ select {
   }
   .panel-hover:hover {
     transform: none;
+  }
+}
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    min-height: 100dvh;
+  }
+  body {
+    min-height: 100dvh;
   }
 }

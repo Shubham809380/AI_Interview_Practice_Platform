@@ -104,7 +104,7 @@ export function AppLayout({ user, onLogout, children }) {
   }, []);
 
   return (
-    <div className="min-h-screen text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen min-h-[100dvh] text-slate-900 dark:text-slate-100">
       <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:hidden dark:border-slate-800 dark:bg-slate-950/95">
         <div className="flex items-center justify-between gap-3">
           <button
@@ -205,7 +205,7 @@ export function AppLayout({ user, onLogout, children }) {
         </aside>
       </div>
 
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen min-h-[100dvh]">
         <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 md:flex">
           <div className="border-b border-slate-800 px-5 py-5">
             <p className="inline-flex items-center rounded-full border border-brand-300/40 bg-brand-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-brand-200">
@@ -255,7 +255,7 @@ export function AppLayout({ user, onLogout, children }) {
           </div>
         </aside>
 
-        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <div className="flex min-h-screen min-h-[100dvh] min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-10 hidden border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:block md:px-6 dark:border-slate-800 dark:bg-slate-950/90">
             <div className="flex items-center justify-between gap-3">
               <div>
