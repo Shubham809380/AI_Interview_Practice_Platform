@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import {
   Brain,
   BriefcaseBusiness,
@@ -289,6 +290,7 @@ export function AppLayout({ user, onLogout, children }) {
           <main className="mx-auto grid min-w-0 w-full max-w-[1440px] gap-4 p-4 md:p-6">{children}</main>
         </div>
       </div>
+      <Analytics />
     </div>
   );
 }
