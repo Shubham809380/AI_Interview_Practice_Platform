@@ -255,7 +255,7 @@ export function AppLayout({ user, onLogout, children }) {
           </div>
         </aside>
 
-        <div className="flex min-h-screen flex-1 flex-col">
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-10 hidden border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:block md:px-6 dark:border-slate-800 dark:bg-slate-950/90">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -286,7 +286,7 @@ export function AppLayout({ user, onLogout, children }) {
             </div>
           </header>
 
-          <main className="mx-auto grid w-full max-w-[1440px] gap-4 p-4 md:p-6">{children}</main>
+          <main className="mx-auto grid min-w-0 w-full max-w-[1440px] gap-4 p-4 md:p-6">{children}</main>
         </div>
       </div>
     </div>

@@ -20,9 +20,9 @@ function isValidEmail(input = "") {
 router.post(
   "/contact",
   asyncHandler(async (req, res) => {
-    const message = normalizeText(req.body.message, 2500);
-    const userName = normalizeText(req.body.userName, 120);
-    const userEmail = normalizeText(req.body.userEmail, 180).toLowerCase();
+    const message = normalizeText(req.body.message || req.body.issue, 2500);
+    const userName = normalizeText(req.body.userName || req.body.name, 120);
+    const userEmail = normalizeText(req.body.userEmail || req.body.email, 180).toLowerCase();
     const pageUrl = normalizeText(req.body.pageUrl, 500);
     const submittedAt = normalizeText(req.body.submittedAt, 80) || new Date().toISOString();
 

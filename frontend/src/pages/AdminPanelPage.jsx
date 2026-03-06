@@ -406,7 +406,7 @@ export function AdminPanelPage({ adminToken = "" }) {
     event.preventDefault();
     await loadQuestionBank(questionFilters);
   }
-  return <div className="grid gap-4"><section className="glass-panel rounded-2xl p-5"><h1 className="inline-flex items-center gap-2 font-display text-3xl font-extrabold text-slate-900 dark:text-slate-100"><BarChart3 size={24} />
+  return <div className="grid min-w-0 gap-4"><section className="glass-panel rounded-2xl p-5"><h1 className="inline-flex items-center gap-2 font-display text-3xl font-extrabold text-slate-900 dark:text-slate-100"><BarChart3 size={24} />
           Admin Panel
         </h1><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Track platform health and update Question Bank instantly from this panel.

@@ -50,6 +50,7 @@ body {
       var(--app-bg-b) 58%,
       var(--app-bg-c));
   color: #0f172a;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
