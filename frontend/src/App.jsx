@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import { useAuth } from "./context/AuthContext";
 import { AppLayout } from "./components/AppLayout";
 import { ContactChatbotWidget } from "./components/ContactChatbotWidget";
@@ -89,5 +90,5 @@ export default function App() {
   if (loading) {
     return <LoadingScreen label="Authenticating..." />;
   }
-  return <><Routes><Route path="/admin-login" element={<AdminLoginPage />} /><Route path="/admin" element={<AdminRouteGate />} /><Route path="/sso-callback" element={<SsoCallbackPage />} />{isAuthenticated ? <Route path="/*" element={<PrivateRoutes />} /> : <Route path="*" element={<AuthPage />} />}</Routes><ContactChatbotWidget /></>;
+  return <><Routes><Route path="/admin-login" element={<AdminLoginPage />} /><Route path="/admin" element={<AdminRouteGate />} /><Route path="/sso-callback" element={<SsoCallbackPage />} />{isAuthenticated ? <Route path="/*" element={<PrivateRoutes />} /> : <Route path="*" element={<AuthPage />} />}</Routes><ContactChatbotWidget /><Analytics /></>;
 }
