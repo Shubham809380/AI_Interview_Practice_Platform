@@ -34,6 +34,7 @@ const CURRENCY_SYMBOL = {
 };
 
 const STATUS_POLL_MS = 3500;
+const UTR_REGEX = /^\d{12}$/;
 
 function formatTime(timestamp) {
   const date = new Date(timestamp);
@@ -55,6 +56,14 @@ function formatCountdown(totalSeconds) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function normalizeUtrInput(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 12);
+}
+
+function isValidUtr(value) {
+  return UTR_REGEX.test(value);
 }
 
 export function PaymentPage() {
@@ -80,7 +89,9 @@ export function PaymentPage() {
   const isPaid = payment?.status === "paid";
   const isPending = payment?.status === "pending";
   const isExpired = payment?.status === "expired";
-  const normalizedUtr = String(utr || "").trim();
+  const normalizedUtr = normalizeUtrInput(utr);
+  const hasUtrInput = normalizedUtr.length > 0;
+  const isUtrValid = isValidUtr(normalizedUtr);
 
   async function refreshPaymentStatus() {
     if (!payment?.paymentId) {
@@ -138,7 +149,7 @@ export function PaymentPage() {
     setError("");
 
     try {
-      const payload = await paymentApi.confirm(token, payment.paymentId, { utr });
+      const payload = await paymentApi.confirm(token, payment.paymentId, { utr: normalizedUtr });
       setPayment(payload.payment);
       setStatusText(payload.message || `Timing Successful at ${formatTime(payload.payment?.paidAt)}.`);
       await refreshUser().catch(() => {});
@@ -187,27 +198,27 @@ export function PaymentPage() {
   }, [secondsLeft, isPending]);
 
   return (
-    <div className="grid gap-4">
-      <section className="glass-panel rounded-2xl p-5">
+    <div className="grid gap-3 sm:gap-4">
+      <section className="glass-panel rounded-2xl p-4 sm:p-5">
         <button
           type="button"
           onClick={() => navigate("/subscriptions")}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto sm:justify-start dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
         >
           <ArrowLeft size={14} />
           Back to Plans
         </button>
 
-        <h1 className="mt-4 font-display text-3xl font-extrabold text-slate-900 dark:text-slate-100">Payment Options</h1>
+        <h1 className="mt-4 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-slate-100">Payment Options</h1>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Complete your upgrade for <strong>{selectedPlan.title}</strong>.
         </p>
       </section>
 
-      <section className="glass-panel rounded-2xl p-5">
+      <section className="glass-panel rounded-2xl p-4 sm:p-5">
         <div className="rounded-xl border border-brand-200 bg-brand-50/50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
           <p className="text-sm text-slate-600 dark:text-slate-300">Plan Summary</p>
-          <p className="mt-1 font-display text-2xl font-extrabold text-slate-900 dark:text-slate-100">
+          <p className="mt-1 font-display text-xl font-extrabold text-slate-900 sm:text-2xl dark:text-slate-100">
             {selectedPlan.title}: {CURRENCY_SYMBOL[paymentCurrency]} {amount}
             {selectedPlan.period}
           </p>
@@ -223,7 +234,7 @@ export function PaymentPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <button
             type="button"
             onClick={() => setMethod("upi")}
@@ -264,21 +275,21 @@ export function PaymentPage() {
           type="button"
           onClick={createUpiIntent}
           disabled={busy || confirming}
-          className="mt-4 w-full rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-70"
+          className="mt-4 w-full rounded-xl bg-brand-500 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-brand-600 sm:text-sm disabled:opacity-70"
         >
           {busy ? "Generating QR..." : `Generate UPI QR for ${CURRENCY_SYMBOL[paymentCurrency]} ${amount}`}
         </button>
 
         {payment ? (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-            <div className="grid gap-4 lg:grid-cols-[260px,1fr]">
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 sm:p-4 dark:border-slate-700 dark:bg-slate-900">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <img src={payment.qrCodeUrl} alt="UPI payment QR" className="mx-auto h-56 w-56 rounded-md bg-white p-2" />
+                <img src={payment.qrCodeUrl} alt="UPI payment QR" className="mx-auto h-48 w-48 rounded-md bg-white p-2 sm:h-56 sm:w-56" />
               </div>
 
               <div className="grid gap-2 text-sm">
-                <p className="font-semibold text-slate-900 dark:text-slate-100">UPI ID: {payment.upiId}</p>
-                <p className="text-slate-600 dark:text-slate-300">Payment Ref: {payment.paymentId}</p>
+                <p className="break-all font-semibold text-slate-900 dark:text-slate-100">UPI ID: {payment.upiId}</p>
+                <p className="break-all text-slate-600 dark:text-slate-300">Payment Ref: {payment.paymentId}</p>
                 <p className="text-slate-600 dark:text-slate-300">
                   Amount: {CURRENCY_SYMBOL[payment.currency] || payment.currency} {payment.amount}
                 </p>
@@ -287,19 +298,19 @@ export function PaymentPage() {
                   {isPending ? `Expires in ${formatCountdown(secondsLeft)}` : "Payment window closed"}
                 </p>
 
-                <div className="mt-1 flex flex-wrap gap-2">
+                <div className="mt-1 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
                   <button
                     type="button"
                     onClick={openUpiApp}
                     disabled={!isPending}
-                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-70"
+                    className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 sm:w-auto disabled:opacity-70"
                   >
                     Open UPI App
                   </button>
                   <button
                     type="button"
                     onClick={refreshPaymentStatus}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
                   >
                     Check Status
                   </button>
@@ -309,8 +320,11 @@ export function PaymentPage() {
                   UTR / UPI Ref (required)
                   <input
                     value={utr}
-                    onChange={(event) => setUtr(event.target.value)}
-                    placeholder="Enter valid UTR after payment"
+                    onChange={(event) => setUtr(normalizeUtrInput(event.target.value))}
+                    placeholder="Enter 12-digit UTR after payment"
+                    inputMode="numeric"
+                    pattern="[0-9]{12}"
+                    maxLength={12}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal outline-none dark:border-slate-700 dark:bg-slate-900"
                   />
                 </label>
@@ -318,14 +332,19 @@ export function PaymentPage() {
                 <button
                   type="button"
                   onClick={confirmPayment}
-                  disabled={confirming || !isPending || !normalizedUtr}
-                  className="mt-1 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-70"
+                  disabled={confirming || !isPending || !isUtrValid}
+                  className="mt-1 w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 sm:w-auto disabled:opacity-70"
                 >
                   {confirming ? "Confirming..." : "I Have Paid"}
                 </button>
-                {!normalizedUtr ? (
+                {!hasUtrInput ? (
                   <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
                     Subscription activate karne ke liye UTR dena required hai.
+                  </p>
+                ) : null}
+                {hasUtrInput && !isUtrValid ? (
+                  <p className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+                    UTR exactly 12 digits ka hona chahiye.
                   </p>
                 ) : null}
               </div>

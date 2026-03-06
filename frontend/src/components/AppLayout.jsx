@@ -106,7 +106,7 @@ export function AppLayout({ user, onLogout, children }) {
 
   return (
     <div className="min-h-screen min-h-[100dvh] text-slate-900 dark:text-slate-100">
-      <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:hidden dark:border-slate-800 dark:bg-slate-950/95">
+      <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-4 md:hidden dark:border-slate-800 dark:bg-slate-950/95">
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
@@ -287,7 +287,7 @@ export function AppLayout({ user, onLogout, children }) {
             </div>
           </header>
 
-          <main className="mx-auto grid min-w-0 w-full max-w-[1440px] gap-4 p-4 md:p-6">{children}</main>
+          <main className="mx-auto grid min-w-0 w-full max-w-[1440px] gap-4 p-3 sm:p-4 md:p-6">{children}</main>
         </div>
       </div>
       <Analytics />

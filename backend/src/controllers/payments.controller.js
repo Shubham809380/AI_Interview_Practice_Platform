@@ -13,6 +13,7 @@ const SUPPORTED_METHODS = new Set(["upi"]);
 const SUPPORTED_CURRENCIES = new Set(["INR", "USD", "EUR"]);
 const PAYMENT_EXPIRY_MS = 15 * 60 * 1e3;
 const MAX_PAYMENT_HISTORY = 40;
+const UTR_REGEX = /^\d{12}$/;
 function normalizePlan(value) {
   const plan = String(value || "").trim().toLowerCase();
   return plan === "elite" ? "elite" : "pro";
@@ -26,17 +27,11 @@ function normalizeCurrency(value) {
   return SUPPORTED_CURRENCIES.has(currency) ? currency : "INR";
 }
 function normalizeUtr(value) {
-  return String(value || "").trim().replace(/\s+/g, "").slice(0, 64);
+  return String(value || "").trim().replace(/\s+/g, "").slice(0, 12);
 }
 function isValidUtr(value) {
   const normalized = normalizeUtr(value);
-  if (!normalized) {
-    return false;
-  }
-  if (!/^[a-zA-Z0-9_-]{6,64}$/.test(normalized)) {
-    return false;
-  }
-  return true;
+  return UTR_REGEX.test(normalized);
 }
 function createPaymentId() {
   return `PAY-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
@@ -216,7 +211,7 @@ router.post(
     const utr = normalizeUtr(req.body.utr || "");
     if (!isValidUtr(utr)) {
       return res.status(400).json({
-        message: "Valid UTR is required to confirm payment and activate subscription."
+        message: "Valid UTR is required. Enter a 12-digit numeric UTR."
       });
     }
     if (payment.status === "paid") {
@@ -235,6 +230,20 @@ router.post(
     }
     if (payment.status !== "pending") {
       return res.status(409).json({ message: "This payment is no longer pending." });
+    }
+    const duplicateUtr = await User.exists({
+      paymentHistory: {
+        $elemMatch: {
+          paymentId: { $ne: paymentId },
+          status: "paid",
+          utr
+        }
+      }
+    });
+    if (duplicateUtr) {
+      return res.status(409).json({
+        message: "This UTR is already used in another successful payment."
+      });
     }
     payment.status = "paid";
     payment.paidAt = new Date();

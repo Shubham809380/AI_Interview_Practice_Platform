@@ -60,6 +60,24 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+li,
+td,
+th {
+  overflow-wrap: anywhere;
+}
 h1,
 h2,
 h3,
@@ -74,6 +92,7 @@ table {
 }
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 input,
 textarea,
@@ -112,6 +131,24 @@ select {
   }
   .panel-hover:hover {
     transform: none;
+  }
+}
+@media (max-width: 640px) {
+  body {
+    line-height: 1.4;
+  }
+  .glass-panel {
+    border-radius: 14px;
+  }
+  .overflow-x-auto {
+    margin-inline: -0.25rem;
+    padding-inline: 0.25rem;
+  }
+  input,
+  textarea,
+  select,
+  button {
+    min-height: 40px;
   }
 }
 @supports (height: 100dvh) {
