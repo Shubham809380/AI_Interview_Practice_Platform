@@ -54,24 +54,71 @@ function hasOauthCredentials(config) {
 function normalizeOrigin(origin) {
   return String(origin || "").trim().replace(/\/+$/, "");
 }
-function getSafeFrontendOrigin() {
-  const configured = normalizeOrigin(env.frontendOrigin);
-  const fallback = "http://localhost:5173";
-  if (!configured) {
-    return fallback;
+function isLoopbackHost(hostname = "") {
+  return ["localhost", "127.0.0.1"].includes(String(hostname || "").trim().toLowerCase());
+}
+function toSafeHttpOrigin(input) {
+  const candidate = normalizeOrigin(input);
+  if (!candidate) {
+    return "";
   }
   try {
-    const parsed = new URL(configured);
+    const parsed = new URL(candidate);
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      return fallback;
+      return "";
     }
-    return normalizeOrigin(parsed.toString());
+    return normalizeOrigin(parsed.origin);
   } catch {
-    return fallback;
+    return "";
   }
 }
-function getFrontendRedirect(redirectUriInput) {
-  const frontendOrigin = getSafeFrontendOrigin();
+function getVercelOriginFallback() {
+  const raw = String(process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const host = raw.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  if (!host) {
+    return "";
+  }
+  return toSafeHttpOrigin(`https://${host}`);
+}
+function getRequestOrigin(req) {
+  const forwardedProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
+  const forwardedHost = String(req?.headers?.["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = forwardedHost || String(req?.get("host") || "").trim();
+  const protocol = forwardedProto || req?.protocol || "http";
+  if (!host) {
+    return "";
+  }
+  return toSafeHttpOrigin(`${protocol}://${host}`);
+}
+function getSafeBackendOrigin(req) {
+  const requestOrigin = getRequestOrigin(req);
+  const configured = toSafeHttpOrigin(env.backendBaseUrl);
+  const vercelOrigin = getVercelOriginFallback();
+  if (requestOrigin && !isLoopbackHost(new URL(requestOrigin).hostname)) {
+    return requestOrigin;
+  }
+  if (configured && !isLoopbackHost(new URL(configured).hostname)) {
+    return configured;
+  }
+  return requestOrigin || configured || vercelOrigin || "http://localhost:5000";
+}
+function getSafeFrontendOrigin(req) {
+  const requestOrigin = getRequestOrigin(req);
+  const configured = toSafeHttpOrigin(env.frontendOrigin);
+  const vercelOrigin = getVercelOriginFallback();
+  if (configured && !isLoopbackHost(new URL(configured).hostname)) {
+    return configured;
+  }
+  if (requestOrigin && !isLoopbackHost(new URL(requestOrigin).hostname)) {
+    return requestOrigin;
+  }
+  return configured || requestOrigin || vercelOrigin || "http://localhost:5173";
+}
+function getFrontendRedirect(redirectUriInput, req) {
+  const frontendOrigin = getSafeFrontendOrigin(req);
   const fallback = `${frontendOrigin}/`;
   const candidate = String(redirectUriInput || "").trim();
   if (!candidate) {
@@ -270,7 +317,7 @@ function runPassportAuthenticate(req, res, provider) {
 router.get(
   "/oauth/providers",
   asyncHandler(async (req, res) => {
-    const backendOrigin = normalizeOrigin(env.backendBaseUrl) || "http://localhost:5000";
+    const backendOrigin = getSafeBackendOrigin(req);
     const providers = ["google", "linkedin"].map((providerKey) => getOauthConfig(providerKey)).filter(Boolean).map((config) => ({
       provider: config.provider,
       name: config.name,
@@ -284,7 +331,7 @@ router.get(
   "/oauth/:provider/start",
   asyncHandler(async (req, res, next) => {
     const config = getOauthConfig(req.params.provider);
-    const frontendRedirect = getFrontendRedirect(req.query.redirectUri);
+    const frontendRedirect = getFrontendRedirect(req.query.redirectUri, req);
     if (!config) {
       const redirectUrl = appendUrlParam(frontendRedirect, "authError", "Unsupported OAuth provider.");
       return res.redirect(302, redirectUrl);
@@ -305,7 +352,8 @@ router.get(
     const options = {
       session: false,
       scope: config.scopes,
-      state
+      state,
+      callbackURL: `${getSafeBackendOrigin(req)}/api/auth/oauth/${config.provider}/callback`
     };
     if (config.provider === "google") {
       options.prompt = "select_account";
@@ -318,12 +366,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const config = getOauthConfig(req.params.provider);
     if (!config) {
-      const fallbackRedirect = `${getSafeFrontendOrigin()}/`;
+      const fallbackRedirect = `${getSafeFrontendOrigin(req)}/`;
       const redirectUrl = appendUrlParam(fallbackRedirect, "authError", "Unsupported OAuth provider.");
       return res.redirect(302, redirectUrl);
     }
     if (!hasOauthCredentials(config)) {
-      const fallbackRedirect = `${getSafeFrontendOrigin()}/`;
+      const fallbackRedirect = `${getSafeFrontendOrigin(req)}/`;
       const redirectUrl = appendUrlParam(fallbackRedirect, "authError", `${config.name} OAuth is not configured yet.`);
       return res.redirect(302, redirectUrl);
     }
@@ -331,7 +379,7 @@ router.get(
     const providerError = String(req.query.error_description || req.query.error || "").trim();
     const statePayload = consumeOauthState({ provider: config.provider, state });
     if (!statePayload) {
-      const fallbackRedirect = `${getSafeFrontendOrigin()}/`;
+      const fallbackRedirect = `${getSafeFrontendOrigin(req)}/`;
       const redirectUrl = appendUrlParam(fallbackRedirect, "authError", "OAuth session expired. Please try again.");
       return res.redirect(302, redirectUrl);
     }

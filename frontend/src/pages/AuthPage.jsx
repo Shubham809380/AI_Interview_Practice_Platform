@@ -250,9 +250,12 @@ Thanks.`)}`;
       setNotice("");
       const idVars = providerKey === "google" ? "GOOGLE_OAUTH_CLIENT_ID or GOOGLE_CLIENT_ID" : "LINKEDIN_OAUTH_CLIENT_ID or LINKEDIN_CLIENT_ID/LINKEDIN_KEY";
       const secretVars = providerKey === "google" ? "GOOGLE_OAUTH_CLIENT_SECRET or GOOGLE_CLIENT_SECRET" : "LINKEDIN_OAUTH_CLIENT_SECRET or LINKEDIN_CLIENT_SECRET/LINKEDIN_SECRET";
-      const callbackUrl = oauthCallbackUrls[providerKey] || `http://localhost:5000/api/auth/oauth/${providerKey}/callback`;
+      const callbackUrl = oauthCallbackUrls[providerKey] || `${window.location.origin}/api/auth/oauth/${providerKey}/callback`;
+      const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+      const setupTarget = isLocal ? "backend/.env.local" : "Vercel Project Settings -> Environment Variables";
+      const nextStep = isLocal ? "then restart backend." : "then redeploy.";
       setError(
-        `${providerName} OAuth is not configured. Add ${idVars} and ${secretVars} in backend/.env.local, set callback URL to ${callbackUrl}, then restart backend.`
+        `${providerName} OAuth is not configured. Add ${idVars} and ${secretVars} in ${setupTarget}, set callback URL to ${callbackUrl}, ${nextStep}`
       );
       return;
     }

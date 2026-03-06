@@ -59,6 +59,18 @@ function parseCsvList(value, fallbackList) {
   }
   return fallbackList;
 }
+function getVercelOriginFallback() {
+  const raw = normalizeEnvValue(process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL);
+  if (!raw) {
+    return "";
+  }
+  const host = raw.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  if (!host) {
+    return "";
+  }
+  return `https://${host}`;
+}
+const vercelOriginFallback = getVercelOriginFallback();
 const env = {
   nodeEnv: getFirstDefinedEnv(["NODE_ENV"], "development"),
   port: Number(getFirstDefinedEnv(["PORT"], "5000")),
@@ -72,8 +84,8 @@ const env = {
   jwtSecret: getFirstDefinedEnv(["JWT_SECRET"], "dev-secret-change-me"),
   jwtExpiresIn: getFirstDefinedEnv(["JWT_EXPIRES_IN"], "7d"),
   sessionSecret: getFirstDefinedEnv(["SESSION_SECRET", "JWT_SECRET"], "dev-session-secret-change-me"),
-  backendBaseUrl: getFirstDefinedEnv(["BACKEND_BASE_URL"], "http://localhost:5000"),
-  frontendOrigin: getFirstDefinedEnv(["FRONTEND_ORIGIN"], "http://localhost:5173"),
+  backendBaseUrl: getFirstDefinedEnv(["BACKEND_BASE_URL"], vercelOriginFallback || "http://localhost:5000"),
+  frontendOrigin: getFirstDefinedEnv(["FRONTEND_ORIGIN"], vercelOriginFallback || "http://localhost:5173"),
   googleOAuthClientId: getFirstDefinedEnv([
   "GOOGLE_OAUTH_CLIENT_ID",
   "GOOGLE_CLIENT_ID",

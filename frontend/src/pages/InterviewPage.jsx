@@ -18,7 +18,7 @@ import {
   X } from
 "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { questionApi, sessionApi } from "../lib/api";
+import { API_BASE, questionApi, sessionApi } from "../lib/api";
 import { AvatarInterviewer } from "../components/AvatarInterviewer";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
@@ -52,7 +52,6 @@ const EMPTY_DRAFT = {
   mediaReference: ""
 };
 const AI_SPEAKING_VISUAL_SRC = "/whatsapp-speaking.mp4";
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const MAX_RESUME_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_RESUME_TEXT_LENGTH = 12e3;
 const LIVE_RESPONSE_MIN_WORDS = 3;
